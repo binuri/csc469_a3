@@ -1,0 +1,40 @@
+Files in this directory are for CSC469 Assignment 3, Winter 2013
+
+README:		this file
+
+Makefile: 	standard Makefile for this assignment. 
+	        uncomment "-DUSE_LOCN_SERVER" in CFLAGS when you are ready to
+	        obtain chat server parameters from the location server
+
+defs.h: 	the common header file that contains constants and data types
+		you must use in your client code. You must include this file 
+		in your source code.  You must not modify this file.
+
+/*
+ * The following three files are just for your reference. 
+ * You do not need to modify them.
+ */
+
+server.h: 	header file private to chatserver
+server_util.c: 	utility functions for chatserver
+server_main.c: 	chatserver main function
+
+/* 
+ * The following files contain the initial chat client skeleton.
+ * You can modify them in any way that you like.  Major places where you
+ * need to implement something have been flagged with "YOUR CODE HERE" or
+ * similar comments, but you may want to add/modify other places as well 
+ */
+
+client.h:        header file private to chat client (control & receiver programs)
+client_util.c:   common utility functions for chat client, linked into both
+	         chatclient (control) and receiver binaries
+client_main.c:   main implementation for chatclient binary, which handles
+	         user input, control exchanges with chatserver, and sending user
+	         chat messages to server.
+client_recv.c:   main implementation for receiver binary, which handles receiving
+                 chat messages from the server and displaying them.
+
+
+room.cfg: 	a sample room configuration file, feel free to change it
+
