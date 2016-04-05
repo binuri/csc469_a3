@@ -26,6 +26,7 @@ static char *option_string = "f:";
 int ctrl2rcvr_qid;
 char ctrl2rcvr_fname[MAX_FILE_NAME_LEN];
 
+int udp_socket_fd;
 
 void usage(char **argv) {
 	printf("usage:\n");
@@ -91,13 +92,43 @@ void init_receiver()
 	open_client_channel(&ctrl2rcvr_qid);
 
 	/**** YOUR CODE TO FILL IMPLEMENT STEPS 2 AND 3 ****/
+    // NOTE: Used http://www.lowtek.com/sockets/select.html as an example of select with timeout
 
+    int udp_socket_fd;
 	/* 2. Initialize UDP socket for receiving chat messages. */
 
-	/* 3. Tell parent the port number if successful, or failure code if not. 
-	 *    Use the send_error and send_ok functions
-	 */
+    // Obtain a file descriptor
+    if ((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0){
+        printf("ERROR: Error in UDP Socket initialization in receiver\n");
+        send_error(ctrl2rcvr_qid, SOCKET_FAILED);
+        return;
+    }    
 
+    
+    struct sockaddr_in udp_server_addr;
+    memset(&udp_server_addr, 0, sizeof(struct sockaddr_in));
+    
+    udp_server_addr.sin_family = AF_INET;
+    udp_server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    udp_server_addr.sin_port = 0;
+    
+    if (bind(udp_socket_fd, (struct sockaddr *)&udp_server_addr, sizeof(struct sockaddr_in)) < 0){
+        printf("ERROR: Error in UDP Socket binding in receiver\n");
+        send_error(ctrl2rcvr_qid, BIND_FAILED);
+        return;
+    }
+
+    int socket_addr_len = sizeof(struct sockaddr_in);
+    if (getsockname(udp_socket_fd, (struct sockaddr *)&udp_server_addr, (socklen_t *)&socket_addr_len) < 0) {
+        printf("ERROR: Error in getting UDP Socket name in receiver\n");
+        send_error(ctrl2rcvr_qid, NAME_FAILED);
+    }
+
+
+    /* 3. Tell parent the port number if successful, or failure code if not. 
+     *    Use the send_error and send_ok functions
+     */
+    send_ok(ctrl2rcvr_qid, ntohs(udp_server_addr.sin_port));
 }
 
 
@@ -107,8 +138,18 @@ void init_receiver()
 
 void handle_received_msg(char *buf)
 {
-
 	/**** YOUR CODE HERE ****/
+    memset(buf, 0, MAX_MSG_LEN);
+    int ret = recvfrom(udp_socket_fd,  buf, MAX_MSG_LEN, 0, NULL, NULL);
+    
+    if (ret < 0){
+        printf ("ERROR: Error in recieving messages from chat server\n");
+        return;
+    }
+
+    struct chat_msghdr *chmh = (struct chat_msghdr *) buf;
+    
+    printf("%s ::: %s", chmh->sender.member_name, (char *)chmh->msgdata);
 
 }
 
@@ -135,12 +176,51 @@ void receive_msgs()
 
 
 	/**** YOUR CODE HERE ****/
+    
+    fd_set listen_fds;
+    fd_set ready_fds;
+    
+    FD_ZERO(&listen_fds);
+    FD_SET(udp_socket_fd, &listen_fds);
+    
+    struct timeval timeout;  /* Timeout for select */
 
 	while(TRUE) {
 
-		/**** YOUR CODE HERE ****/
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
 
-	}
+        ready_fds = listen_fds;
+    
+        if ((select(udp_socket_fd + 1, &ready_fds, NULL, NULL, &timeout)) < 0){
+             printf("Error when listning to ready sockets\n");
+            exit(1);
+        }
+
+        if (FD_ISSET(udp_socket_fd, &ready_fds)){
+            handle_received_msg(buf);
+        }
+
+        int res;
+        msg_t msg;
+        res = msgrcv(ctrl2rcvr_qid, &msg, sizeof(struct body_s), RECV_TYPE, IPC_NOWAIT);
+
+       
+        if (res == -1 && errno == ENOMSG) {
+            continue;
+        } else if (res > 0){
+            if (msg.body.status == CHAT_QUIT){
+                close(udp_socket_fd);
+                exit(0);
+            } else {
+                printf ("ERROR: Unknown control code : %d\n", msg.body.status);
+            }
+        } else {
+            printf("ERROR: Unknown message recieved\n");
+            exit(1);
+        }
+
+    }
 
 	/* Cleanup */
 	free(buf);
