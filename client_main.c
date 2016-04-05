@@ -256,6 +256,61 @@ int create_receiver()
 int handle_register_req()
 {
 
+    char *buf = (char *)malloc(MAX_MSG_LEN);
+    bzero(buf, MAX_MSG_LEN);
+
+    struct control_msghdr *cmh;
+    cmh = (struct control_msghdr *)buf;
+
+    cmh->msg_type = htons(REGISTER_REQUEST);
+
+    struct register_msgdata *rdata;
+    rdata = (struct register_msgdata *) cmh->msgdata;
+   
+    rdata->udp_port = htons(4444); 
+    //rdata->udp_port = htons(client_udp_port);
+    strcpy((char *)rdata->member_name, member_name);
+    
+    cmh->msg_len = sizeof(struct control_msghdr) + 
+                   sizeof(struct register_msgdata) + 
+                   strlen(member_name) + 1;
+    
+    char res[MAX_MSG_LEN];
+    memset(res, 0, MAX_MSG_LEN);
+    
+    /** Sending control message */
+    int tcp_fd = 0;
+    if ((tcp_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+        printf("ERROR: Socket creation failed");
+        return - 1;
+    }
+    
+    if (connect(tcp_fd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0){
+        printf("ERROR: Connection Failed");
+        return - 1;
+    }
+
+   send(tcp_fd, buf, cmh->msg_len, 0);
+
+    memset(res, 0, MAX_MSG_LEN);
+
+    if (recv(tcp_fd, res, MAX_MSG_LEN, 0) != 0){
+        printf ("ERROR: Could not recieve messages from server");
+        return -1;
+    }
+
+   
+    close(tcp_fd);
+    
+    struct control_msghdr *res_hdr= (struct control_msghdr *)res;
+    if (res_hdr->msg_type == REGISTER_SUCC){
+        member_id = res_hdr->member_id;
+        printf("SUCCESS: Registration with server complete\n");
+    } else {
+        printf("ERROR: Registration with server failed\n");
+        return -2;
+    }
+     
 	return 0;
 }
 
@@ -264,7 +319,6 @@ int handle_room_list_req()
 
 	return 0;
 }
-
 int handle_member_list_req(char *room_name)
 {
 
@@ -304,27 +358,76 @@ int init_client()
 	/* 0. Get server host name, port numbers from location server.
 	 *    See retrieve_chatserver_info() in client_util.c
 	 */
+    if(retrieve_chatserver_info(
+                server_host_name, &server_tcp_port, &server_udp_port) == -1){
+        return -1;
+    }
 
 #endif
  
 	/* 1. initialization to allow TCP-based control messages to chat server */
+    
+    // Will be the list of addrinfo structs
+    struct addrinfo *tcp_info;
+
+    // Hints(restrictions) to be used when getting the address info
+    struct addrinfo tcp_hints;
+    memset(&tcp_hints, 0, sizeof(tcp_hints));
+    tcp_hints.ai_family = AF_INET;
+    tcp_hints.ai_socktype = SOCK_STREAM;
+
+    // Defines the service
+    char tcp_port[MAX_HOST_NAME_LEN];
+    sprintf(tcp_port, "%d", server_tcp_port);
+
+    // Gets the tcp address information for the host
+    int status = getaddrinfo(server_host_name, tcp_port, &tcp_hints, &tcp_info);
+    if (status != 0){
+        //TODO : ERROR MESSAGE
+        return -1;
+    }
 
 
 	/* 2. initialization to allow UDP-based chat messages to chat server */
+    struct addrinfo *udp_info;
+
+    struct addrinfo udp_hints;
+    memset(&udp_hints, 0, sizeof(udp_hints));
+    udp_hints.ai_family = AF_INET;
+    udp_hints.ai_socktype = SOCK_DGRAM;
+
+    char udp_port[MAX_HOST_NAME_LEN];
+    sprintf(udp_port, "%d", server_udp_port);
+
+    status = getaddrinfo(server_host_name, udp_port, &udp_hints, &udp_info);
+    if (status != 0){
+        //TODO : ERROR MESSAGE
+        return -1;
+    }
+    
+    // Create the socket to be used for chat messages
+    int udp_socket_fd = socket(udp_hints.ai_family, udp_hints.ai_socktype, 0);
+    if (udp_socket_fd != 0){
+        //TODO : Error
+        return -1;
+    }
 
 
 	/* 3. spawn receiver process - see create_receiver() in this file. */
-
-
-	/* 4. register with chat server */
+    
+    if ((status = create_receiver()) != 0){
+        return -1;
+    }
     
 
 
+	/* 4. register with chat server */
+    if ((status = handle_register_req()) != 0){
+        return -1;
+    }
+
 	return 0;
-
 }
-
-
 
 void handle_chatmsg_input(char *inputdata)
 {
@@ -482,7 +585,6 @@ void get_user_input()
 	free(buf);
   
 }
-
 
 int main(int argc, char **argv)
 {
