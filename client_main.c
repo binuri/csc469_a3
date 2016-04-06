@@ -263,19 +263,26 @@ int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
 
     cmh->msg_type = htons(msg_type);
 
-    if (msg_type == REGISTER_REQUEST) {
-        struct register_msgdata *rdata;
-        rdata = (struct register_msgdata *) cmh->msgdata;
-        rdata->udp_port = htons(client_udp_port);
-        strcpy((char *)rdata->member_name, member_name);
-
+    if (msg_type == QUIT_REQUEST || msg_type == ROOM_LIST_REQUEST){
+        // No need for additional data 
         cmh->msg_len = sizeof(struct control_msghdr) + 1;
-
     } else {
-        cmh->msg_len = sizeof(struct control_msghdr) +
-                       sizeof(struct register_msgdata) +
-                       strlen(member_name) + 1;
-    }
+        if (msg_type == REGISTER_REQUEST) {
+            struct register_msgdata *rdata;
+            rdata = (struct register_msgdata *) cmh->msgdata;
+            rdata->udp_port = htons(client_udp_port);
+
+            strcpy((char *)rdata->member_name, member_name);
+
+            cmh->msg_len = sizeof(struct control_msghdr) +
+            sizeof(struct register_msgdata) +
+            strlen(member_name) + 1;
+        } else {
+            memcpy(cmh->msgdata, room_name, strlen(room_name) + 1);
+            cmh->msg_len = sizeof(struct control_msghdr) +
+                strlen(room_name) + 1;
+        }
+    } 
 
     cmh->member_id = member_id;
 
@@ -431,13 +438,13 @@ int handle_switch_room_req(char *room_name)
     
     char response[MAX_MSG_LEN];
 
-    if (send_control_msg(MEMBER_LIST_REQUEST, response, room_name) < 0){
+    if (send_control_msg(SWITCH_ROOM_REQUEST, response, room_name) < 0){
         return -1;
     }
 
     struct control_msghdr *res_hdr= (struct control_msghdr *)response;
 
-    if (ntohs(res_hdr->msg_type) == MEMBER_LIST_SUCC){
+    if (ntohs(res_hdr->msg_type) == SWITCH_ROOM_SUCC){
         snprintf(info, 
             sizeof(info), 
             "[handle_switch_room_req] Successfully switched the client to room %s", 
