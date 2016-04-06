@@ -466,7 +466,33 @@ int handle_switch_room_req(char *room_name)
 
 int handle_create_room_req(char *room_name)
 {
+    log_info("[handle_create_room_req] Starting to create room in the server\n");
+    
+    char response[MAX_MSG_LEN];
 
+    if (send_control_msg(CREATE_ROOM_REQUEST, response, room_name) < 0){
+        return -1;
+    }
+
+    struct control_msghdr *res_hdr= (struct control_msghdr *)response;
+
+    if (ntohs(res_hdr->msg_type) == CREATE_ROOM_SUCC){
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_create_room_req] Successfully created the room %s", 
+            room_name);
+        log_info(info);
+
+    } else {
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_create_room_req] Failed to create the room %s :  %s\n", 
+            room_name,
+            (char *)res_hdr->msgdata);
+        log_info(info);
+    }
+
+    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
 
@@ -699,6 +725,7 @@ void handle_command_input(char *line)
 
     /* 2. Passed format checks.  Handle the command */
 
+    result = 0;
     switch(cmd) {
 
     case 'r':
@@ -729,7 +756,9 @@ void handle_command_input(char *line)
     /* Currently, we ignore the result of command handling.
      * You may want to change that.
      */
-    (void)result;
+    if(result < 0){
+        shutdown_clean();
+    }
     return;
 }
 
