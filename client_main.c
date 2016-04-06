@@ -251,9 +251,9 @@ int create_receiver()
 }
 
 
-int send_control_msg(u_int16_t msg_type, char *res){
+int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
 
-    log_info("[send_control_msg] Starting to send control message...\n");
+    log_info("\t[send_control_msg] Starting to send control message...\n");
 
     char *buf = (char *)malloc(MAX_MSG_LEN);
     bzero(buf, MAX_MSG_LEN);
@@ -283,38 +283,38 @@ int send_control_msg(u_int16_t msg_type, char *res){
     int tcp_fd = 0;
     if ((tcp_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         printf("ERROR: Failed to create socket for control messages\n");
-        log_info("[send_control_msg Failed to create socket for control messages\n");
+        log_info("\t[send_control_msg Failed to create socket for control messages\n");
         free(buf);
         return - 1;
     }
 
     // Debug log
-    snprintf(info, sizeof(info), "[send_control_msg] Socket created for control messages (TCP) => %d\n", tcp_fd);
+    snprintf(info, sizeof(info), "\t[send_control_msg] Socket created for control messages (TCP) => %d\n", tcp_fd);
     log_info(info);
 
     if (connect(tcp_fd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0){
         printf("ERROR: Failed to connect to the server's TCP Socket\n");
-        log_info("[send_control_msg] Failed to connect to the server's TCP Socket\n");
+        log_info("\t[send_control_msg] Failed to connect to the server's TCP Socket\n");
         free(buf);
         return - 1;
     }
 
-    log_info("[send_control_msg] Successfully connected to the server's TCP socket\n");
+    log_info("\t[send_control_msg] Successfully connected to the server's TCP socket\n");
 
     send(tcp_fd, buf, cmh->msg_len, 0);
 
-    log_info("[send_control_msg] Sent control message to server\n");
+    log_info("\t[send_control_msg] Sent control message to server\n");
 
     memset(res, 0, MAX_MSG_LEN);
 
     if (recv(tcp_fd, res, MAX_MSG_LEN, 0) < 0){
         printf("ERROR: Failed to recieve control message from server\n");
-        log_info("[send_control_msg] Failed to recieve control message from server\n");
+        log_info("\t[send_control_msg] Failed to recieve control message from server\n");
         free(buf);
         return - 1;
     }
 
-    log_info("[send_control_msg] Received control message from server\n");
+    log_info("\t[send_control_msg] Received control message from server\n");
 
     close(tcp_fd);
 
@@ -343,7 +343,7 @@ int handle_register_req()
     char res[MAX_MSG_LEN];
     memset(res, 0, MAX_MSG_LEN);
 
-    if (send_control_msg(REGISTER_REQUEST, res) < 0){
+    if (send_control_msg(REGISTER_REQUEST, res, NULL) < 0){
         return -1;
     }
 
@@ -368,8 +368,9 @@ int handle_register_req()
 int handle_room_list_req()
 {
     char response[MAX_MSG_LEN];
+    log_info("[handle_room_list_req] Starting to retrieve room list from server\n");
 
-    if (send_control_msg(ROOM_LIST_REQUEST, response) < 0){
+    if (send_control_msg(ROOM_LIST_REQUEST, response, NULL) < 0){
         return -1;
     }
 
@@ -380,21 +381,46 @@ int handle_room_list_req()
             "[handle_room_list_req] Successfully retrieved room lists from server. The list of rooms is %s\n", 
             (char *)res_hdr->msgdata);
         log_info(info);
-        printf("%s\n", (char *)res_hdr->msgdata);
     } else {
         log_info("[handle_room_list_req] Failed to retrieve room list from the server : ");
         log_info((char *)res_hdr->msgdata);
         log_info("\n");
-
-        printf("%s\n", (char *)res_hdr->msgdata);
     }
 
-
+    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
 int handle_member_list_req(char *room_name)
 {
 
+    log_info("[handle_member_list_req] Starting to retrieve member list for given room from the server\n");
+    
+    char response[MAX_MSG_LEN];
+
+    if (send_control_msg(MEMBER_LIST_REQUEST, response, room_name) < 0){
+        return -1;
+    }
+
+    struct control_msghdr *res_hdr= (struct control_msghdr *)response;
+
+    if (ntohs(res_hdr->msg_type) == MEMBER_LIST_SUCC){
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_member_list_req] Successfully retrieved member lists for room %s from server. Members :  %s\n", 
+            room_name,
+            (char *)res_hdr->msgdata);
+        log_info(info);
+
+    } else {
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_member_list_req] Failed to retrieve room member list for room %s from the server :  %s\n", 
+            room_name,
+            (char *)res_hdr->msgdata);
+        log_info(info);
+    }
+
+    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
 
@@ -417,7 +443,7 @@ int handle_quit_req()
     log_info("[handle_quit_req] Starting to shutdown the client...\n");
 
     char return_msg[MAX_MSG_LEN];
-    if (send_control_msg(QUIT_REQUEST, return_msg) < 0){
+    if (send_control_msg(QUIT_REQUEST, return_msg, NULL) < 0){
         log_info("[handle_quit_req] Failed to remove client from the server.\n");
         return -1;
     }
@@ -778,6 +804,7 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
 
 
 
