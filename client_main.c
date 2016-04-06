@@ -119,6 +119,8 @@ void shutdown_clean() {
         perror("cleanup - msgctl removal failed");
     }
 
+    printf("Client terminated");
+
     exit(0);
 }
 
@@ -450,6 +452,7 @@ int handle_switch_room_req(char *room_name)
             "[handle_switch_room_req] Successfully switched the client to room %s", 
             room_name);
         log_info(info);
+        printf("SUCCESS: Switched to room %s", room_name);
 
     } else {
         snprintf(info, 
@@ -482,6 +485,7 @@ int handle_create_room_req(char *room_name)
             "[handle_create_room_req] Successfully created the room %s", 
             room_name);
         log_info(info);
+        printf("SUCCESS: Room %s created", room_name);
 
     } else {
         snprintf(info, 
