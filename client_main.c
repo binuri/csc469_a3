@@ -249,6 +249,53 @@ int create_receiver()
 }
 
 
+int send_control_msg(char *buf, int msg_len, char *res){
+
+    log_info("[send_control_msg] Starting to send control message...\n");
+
+    /** Sending control message */
+    int tcp_fd = 0;
+    if ((tcp_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+        printf("ERROR: Failed to create socket for control messages\n");
+        log_info("[send_control_msg Failed to create socket for control messages\n");
+        return - 1;
+    }
+
+    // Debug log
+    snprintf(info, sizeof(info), "[send_control_msg] Socket created for control messages (TCP) => %d\n", tcp_fd);
+    log_info(info);
+
+    if (connect(tcp_fd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0){
+        printf("ERROR: Failed to connect to the server's TCP Socket\n");
+        log_info("[send_control_msg] Failed to connect to the server's TCP Socket\n");
+        return - 1;
+    }
+
+    log_info("[send_control_msg] Successfully connected to the server's TCP socket\n");
+
+    send(tcp_fd, buf, msg_len, 0);
+
+    log_info("[send_control_msg] Sent control message to server\n");
+
+    memset(res, 0, MAX_MSG_LEN);
+
+    if (recv(tcp_fd, res, MAX_MSG_LEN, 0) < 0){
+        printf("ERROR: Failed to recieve control message from server\n");
+        log_info("[send_control_msg] Failed to recieve control message from server\n");
+        return - 1;
+    }
+
+    log_info("[send_control_msg] Received control message from server\n");
+
+    close(tcp_fd);
+
+    log_info("[send_control_msg] Successfully finished sending control messages...\n");
+    return 0;
+
+
+}
+
+
 /*********************************************************************/
 
 /* We define one handle_XXX_req() function for each type of
@@ -282,41 +329,9 @@ int handle_register_req()
     char res[MAX_MSG_LEN];
     memset(res, 0, MAX_MSG_LEN);
 
-    /** Sending control message */
-    int tcp_fd = 0;
-    if ((tcp_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-        printf("ERROR: Failed to create socket for control messages\n");
-        log_info("[handle_register_req] Failed to create socket for control messages\n");
-        return - 1;
+    if (send_control_msg(buf, cmh->msg_len, res) < 0){
+        return -1;
     }
-
-    // Debug log
-    snprintf(info, sizeof(info), "[handle_register_req] Socket created for control messages (TCP) => %d\n", tcp_fd);
-    log_info(info);
-
-    if (connect(tcp_fd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0){
-        printf("ERROR: Failed to connect to the server's TCP Socket\n");
-        log_info("[handle_register_req] Failed to connect to the server's TCP Socket\n");
-        return - 1;
-    }
-
-    log_info("[handle_register_req] Successfully connected to the server's TCP socket\n");
-
-    send(tcp_fd, buf, cmh->msg_len, 0);
-
-    log_info("[handle_register_req] Sent control message to server\n");
-
-    memset(res, 0, MAX_MSG_LEN);
-
-    if (recv(tcp_fd, res, MAX_MSG_LEN, 0) < 0){
-        printf("ERROR: Failed to recieve control message from server\n");
-        log_info("[handle_register_req] Failed to recieve control message from server\n");
-        return - 1;
-    }
-
-    log_info("[handle_register_req] Received control message from server\n");
-
-    close(tcp_fd);
 
     struct control_msghdr *res_hdr= (struct control_msghdr *)res;
     if (ntohs(res_hdr->msg_type) == REGISTER_SUCC){
@@ -715,4 +730,5 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
 
