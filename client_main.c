@@ -269,12 +269,12 @@ int send_control_msg(u_int16_t msg_type, char *res){
         rdata->udp_port = htons(client_udp_port);
         strcpy((char *)rdata->member_name, member_name);
 
-        cmh->msg_len = sizeof(struct control_msghdr) + 
+        cmh->msg_len = sizeof(struct control_msghdr) + 1;
+
+    } else {
+        cmh->msg_len = sizeof(struct control_msghdr) +
                        sizeof(struct register_msgdata) +
                        strlen(member_name) + 1;
-        
-    } else {
-        cmh->msg_len = sizeof(struct control_msghdr) + 1;
     }
 
     cmh->member_id = member_id;
@@ -367,6 +367,28 @@ int handle_register_req()
 
 int handle_room_list_req()
 {
+    char response[MAX_MSG_LEN];
+
+    if (send_control_msg(ROOM_LIST_REQUEST, response) < 0){
+        return -1;
+    }
+
+    struct control_msghdr *res_hdr= (struct control_msghdr *)response;
+    if (ntohs(res_hdr->msg_type) == ROOM_LIST_SUCC){
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_room_list_req] Successfully retrieved room lists from server. The list of rooms is %s\n", 
+            (char *)res_hdr->msgdata);
+        log_info(info);
+        printf("%s\n", (char *)res_hdr->msgdata);
+    } else {
+        log_info("[handle_room_list_req] Failed to retrieve room list from the server : ");
+        log_info((char *)res_hdr->msgdata);
+        log_info("\n");
+
+        printf("%s\n", (char *)res_hdr->msgdata);
+    }
+
 
     return 0;
 }
