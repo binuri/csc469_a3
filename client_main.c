@@ -323,7 +323,11 @@ int handle_register_req()
     struct control_msghdr *res_hdr= (struct control_msghdr *)res;
     if (ntohs(res_hdr->msg_type) == REGISTER_SUCC){
         member_id = res_hdr->member_id;
-        log_info("[handle_register_req] Successfully finished registering with the server\n");
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_register_req] Successfully finished registering with the server. The member_id of the client is %d\n", 
+            member_id);
+        log_info(info);
         printf("SUCCESS: Registration with server complete\n");
     } else {
         log_info("[handle_register_req] Failed to register with the server\n");
@@ -484,7 +488,7 @@ int init_client()
         return -1;
     }
 
-     log_info("Successfully registered client with chat server\n");
+     log_info("[init_client] Successfully registered client with chat server\n");
 
     return 0;
 }
@@ -672,7 +676,7 @@ int main(int argc, char **argv)
     }
 
     if (DEBUG){
-        logfp = fopen("chatclient.log", "w");
+        logfp = fopen("pclient.log", "w");
         if (logfp == NULL){
             printf("Invalid log file provided for chat client\n");
         } else {
