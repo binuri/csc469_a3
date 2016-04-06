@@ -25,12 +25,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define DEBUG 1
-
 /*************** GLOBAL VARIABLES ******************/
 
-FILE *logfp; /* Used for debug log*/
 char info[150];
+FILE *logfp = NULL;
 
 static char *option_string = "h:t:u:n:";
 

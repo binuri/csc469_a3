@@ -25,6 +25,9 @@
 
 #include "defs.h"
 
+/*** Reqired for logging ***/
+#define DEBUG 1
+
 /*** Defines for client control <--> receiver communication ***/
 
 struct body_s {
