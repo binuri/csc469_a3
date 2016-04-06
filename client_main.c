@@ -427,6 +427,33 @@ int handle_member_list_req(char *room_name)
 int handle_switch_room_req(char *room_name)
 {
 
+    log_info("[handle_switch_room_req] Starting to switch client to the given room in the server\n");
+    
+    char response[MAX_MSG_LEN];
+
+    if (send_control_msg(MEMBER_LIST_REQUEST, response, room_name) < 0){
+        return -1;
+    }
+
+    struct control_msghdr *res_hdr= (struct control_msghdr *)response;
+
+    if (ntohs(res_hdr->msg_type) == MEMBER_LIST_SUCC){
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_switch_room_req] Successfully switched the client to room %s", 
+            room_name);
+        log_info(info);
+
+    } else {
+        snprintf(info, 
+            sizeof(info), 
+            "[handle_switch_room_req] Failed to switch the client to room %s :  %s\n", 
+            room_name,
+            (char *)res_hdr->msgdata);
+        log_info(info);
+    }
+
+    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
 
@@ -804,6 +831,7 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
 
 
 
