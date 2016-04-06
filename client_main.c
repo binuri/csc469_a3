@@ -263,14 +263,19 @@ int send_control_msg(u_int16_t msg_type, char *res){
 
     cmh->msg_type = htons(msg_type);
 
-    struct register_msgdata *rdata;
-    rdata = (struct register_msgdata *) cmh->msgdata;
-    rdata->udp_port = htons(client_udp_port);
-    strcpy((char *)rdata->member_name, member_name);
+    if (msg_type == REGISTER_REQUEST) {
+        struct register_msgdata *rdata;
+        rdata = (struct register_msgdata *) cmh->msgdata;
+        rdata->udp_port = htons(client_udp_port);
+        strcpy((char *)rdata->member_name, member_name);
 
-    cmh->msg_len = sizeof(struct control_msghdr) +
-                   sizeof(struct register_msgdata) +
-                   strlen(member_name) + 1;
+        cmh->msg_len = sizeof(struct control_msghdr) + 
+                       sizeof(struct register_msgdata) +
+                       strlen(member_name) + 1;
+        
+    } else {
+        cmh->msg_len = sizeof(struct control_msghdr) + 1;
+    }
 
     cmh->member_id = member_id;
 
