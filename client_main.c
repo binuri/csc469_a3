@@ -98,6 +98,8 @@ void shutdown_clean() {
      * might allocate.
      */
 
+    log_info("[shutdown_clean] Safely terminating client and receiver.\n");
+
     msg_t msg;
 
     /* 1. Send message to receiver to quit */
@@ -249,15 +251,35 @@ int create_receiver()
 }
 
 
-int send_control_msg(char *buf, int msg_len, char *res){
+int send_control_msg(u_int16_t msg_type, char *res){
 
     log_info("[send_control_msg] Starting to send control message...\n");
+
+    char *buf = (char *)malloc(MAX_MSG_LEN);
+    bzero(buf, MAX_MSG_LEN);
+
+    struct control_msghdr *cmh;
+    cmh = (struct control_msghdr *)buf;
+
+    cmh->msg_type = htons(msg_type);
+
+    struct register_msgdata *rdata;
+    rdata = (struct register_msgdata *) cmh->msgdata;
+    rdata->udp_port = htons(client_udp_port);
+    strcpy((char *)rdata->member_name, member_name);
+
+    cmh->msg_len = sizeof(struct control_msghdr) +
+                   sizeof(struct register_msgdata) +
+                   strlen(member_name) + 1;
+
+    cmh->member_id = member_id;
 
     /** Sending control message */
     int tcp_fd = 0;
     if ((tcp_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         printf("ERROR: Failed to create socket for control messages\n");
         log_info("[send_control_msg Failed to create socket for control messages\n");
+        free(buf);
         return - 1;
     }
 
@@ -268,12 +290,13 @@ int send_control_msg(char *buf, int msg_len, char *res){
     if (connect(tcp_fd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0){
         printf("ERROR: Failed to connect to the server's TCP Socket\n");
         log_info("[send_control_msg] Failed to connect to the server's TCP Socket\n");
+        free(buf);
         return - 1;
     }
 
     log_info("[send_control_msg] Successfully connected to the server's TCP socket\n");
 
-    send(tcp_fd, buf, msg_len, 0);
+    send(tcp_fd, buf, cmh->msg_len, 0);
 
     log_info("[send_control_msg] Sent control message to server\n");
 
@@ -282,6 +305,7 @@ int send_control_msg(char *buf, int msg_len, char *res){
     if (recv(tcp_fd, res, MAX_MSG_LEN, 0) < 0){
         printf("ERROR: Failed to recieve control message from server\n");
         log_info("[send_control_msg] Failed to recieve control message from server\n");
+        free(buf);
         return - 1;
     }
 
@@ -290,6 +314,7 @@ int send_control_msg(char *buf, int msg_len, char *res){
     close(tcp_fd);
 
     log_info("[send_control_msg] Successfully finished sending control messages...\n");
+    free(buf);
     return 0;
 
 
@@ -309,27 +334,11 @@ int handle_register_req()
 
     log_info("[handle_register_req] Starting to register client with the server\n");
 
-    char *buf = (char *)malloc(MAX_MSG_LEN);
-    bzero(buf, MAX_MSG_LEN);
-
-    struct control_msghdr *cmh;
-    cmh = (struct control_msghdr *)buf;
-
-    cmh->msg_type = htons(REGISTER_REQUEST);
-
-    struct register_msgdata *rdata;
-    rdata = (struct register_msgdata *) cmh->msgdata;
-    rdata->udp_port = htons(client_udp_port);
-    strcpy((char *)rdata->member_name, member_name);
-
-    cmh->msg_len = sizeof(struct control_msghdr) +
-                   sizeof(struct register_msgdata) +
-                   strlen(member_name) + 1;
 
     char res[MAX_MSG_LEN];
     memset(res, 0, MAX_MSG_LEN);
 
-    if (send_control_msg(buf, cmh->msg_len, res) < 0){
+    if (send_control_msg(REGISTER_REQUEST, res) < 0){
         return -1;
     }
 
@@ -378,6 +387,15 @@ int handle_create_room_req(char *room_name)
 int handle_quit_req()
 {
 
+    log_info("[handle_quit_req] Starting to shutdown the client...\n");
+
+    char return_msg[MAX_MSG_LEN];
+    if (send_control_msg(QUIT_REQUEST, return_msg) < 0){
+        log_info("[handle_quit_req] Failed to remove client from the server.\n");
+        return -1;
+    }
+
+    shutdown_clean();
     return 0;
 }
 
@@ -498,6 +516,8 @@ int init_client()
     if ((status = handle_register_req()) != 0){
         printf("ERROR: Failed to register with chat server\n");
         log_info("[init_client] Failed to register with chat server\n");
+
+        shutdown_clean();
         return -1;
     }
 
@@ -721,6 +741,7 @@ int main(int argc, char **argv)
 
 #endif /* USE_LOCN_SERVER */
 
+    member_id = 0;
     if (init_client() < 0) {
         printf("Chat client is terminated since the the initialization was unsuccessful\n");
         return -1;
@@ -730,5 +751,6 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
 
 
