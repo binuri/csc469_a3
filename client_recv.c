@@ -107,7 +107,6 @@ void init_receiver()
     /**** YOUR CODE TO FILL IMPLEMENT STEPS 2 AND 3 ****/
     // NOTE: Used http://www.lowtek.com/sockets/select.html as an example of select with timeout
 
-    int udp_socket_fd;
     /* 2. Initialize UDP socket for receiving chat messages. */
 
     // Obtain a file descriptor

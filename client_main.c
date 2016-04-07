@@ -119,8 +119,7 @@ void shutdown_clean() {
         perror("cleanup - msgctl removal failed");
     }
 
-    printf("Client terminated");
-
+    printf("Client terminated\n");
     exit(0);
 }
 
@@ -364,10 +363,10 @@ int handle_register_req()
             "[handle_register_req] Successfully finished registering with the server. The member_id of the client is %d\n", 
             member_id);
         log_info(info);
-        printf("SUCCESS: Registration with server complete\n");
+        printf("==> Registration with server complete\n");
     } else {
         log_info("[handle_register_req] Failed to register with the server\n");
-        printf("ERROR: %s\n", (char *)res_hdr->msgdata);
+        printf("ERROR: Registration incomplete. %s\n", (char *)res_hdr->msgdata);
         return -2;
     }
     
@@ -390,15 +389,17 @@ int handle_room_list_req()
             "[handle_room_list_req] Successfully retrieved room lists from server. The list of rooms is %s\n", 
             (char *)res_hdr->msgdata);
         log_info(info);
+        printf("==> %s\n",  (char *)res_hdr->msgdata);
     } else {
         log_info("[handle_room_list_req] Failed to retrieve room list from the server : ");
         log_info((char *)res_hdr->msgdata);
         log_info("\n");
+        printf("Incomplete : %s\n",  (char *)res_hdr->msgdata);
     }
 
-    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
+
 int handle_member_list_req(char *room_name)
 {
 
@@ -419,7 +420,7 @@ int handle_member_list_req(char *room_name)
             room_name,
             (char *)res_hdr->msgdata);
         log_info(info);
-
+        printf("==> %s\n",  (char *)res_hdr->msgdata);
     } else {
         snprintf(info, 
             sizeof(info), 
@@ -427,9 +428,9 @@ int handle_member_list_req(char *room_name)
             room_name,
             (char *)res_hdr->msgdata);
         log_info(info);
+        printf("Incomplete : %s\n",  (char *)res_hdr->msgdata);
     }
 
-    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
 
@@ -449,10 +450,10 @@ int handle_switch_room_req(char *room_name)
     if (ntohs(res_hdr->msg_type) == SWITCH_ROOM_SUCC){
         snprintf(info, 
             sizeof(info), 
-            "[handle_switch_room_req] Successfully switched the client to room %s", 
+            "[handle_switch_room_req] Successfully switched the client to room %s\n", 
             room_name);
         log_info(info);
-        printf("SUCCESS: Switched to room %s", room_name);
+        printf("==> Switched to room %s\n", room_name);
 
     } else {
         snprintf(info, 
@@ -461,9 +462,9 @@ int handle_switch_room_req(char *room_name)
             room_name,
             (char *)res_hdr->msgdata);
         log_info(info);
+        printf("Incomplete: %s\n", (char *)res_hdr->msgdata);
     }
 
-    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
 
@@ -482,11 +483,10 @@ int handle_create_room_req(char *room_name)
     if (ntohs(res_hdr->msg_type) == CREATE_ROOM_SUCC){
         snprintf(info, 
             sizeof(info), 
-            "[handle_create_room_req] Successfully created the room %s", 
+            "[handle_create_room_req] Successfully created the room %s\n", 
             room_name);
         log_info(info);
-        printf("SUCCESS: Room %s created", room_name);
-
+        printf("==> Created room %s\n", room_name);
     } else {
         snprintf(info, 
             sizeof(info), 
@@ -494,9 +494,9 @@ int handle_create_room_req(char *room_name)
             room_name,
             (char *)res_hdr->msgdata);
         log_info(info);
+        printf("Incomplete: %s\n", (char *)res_hdr->msgdata);
     }
 
-    printf("%s\n", (char *)res_hdr->msgdata);
     return 0;
 }
 
@@ -605,7 +605,7 @@ int init_client()
     log_info(info);
 
     // Create the socket to be used for chat messages
-    int udp_socket_fd = socket(udp_hints.ai_family, udp_hints.ai_socktype, 0);
+    udp_socket_fd = socket(udp_hints.ai_family, udp_hints.ai_socktype, 0);
     if (udp_socket_fd < 0){
         printf("ERROR: Failed to create socket for chat messages\n");
         log_info("[init_client] Failed to create socket for chat messages\n");
@@ -650,6 +650,7 @@ void handle_chatmsg_input(char *inputdata)
      * struct and send the chat message to the chat server.
      */
 
+    log_info("[handle_chatmsg_input] Starting to handle chat message input\n");
     char *buf = (char *)malloc(MAX_MSG_LEN);
 
     if (buf == 0) {
@@ -663,6 +664,26 @@ void handle_chatmsg_input(char *inputdata)
 
     /**** YOUR CODE HERE ****/
 
+    struct chat_msghdr *msghdr = (struct chat_msghdr *) buf;
+
+    msghdr->sender.member_id = member_id;
+    msghdr->msg_len = sizeof(struct chat_msghdr) + strlen(inputdata) + 1;
+    strcpy((char *)msghdr->msgdata, inputdata);
+
+    snprintf(info, 
+        sizeof(info), 
+        "[handle_chatmsg_input] Writting to server UDP socket fd %di\n", udp_socket_fd);
+    log_info(info);
+
+    if (sendto(udp_socket_fd, buf, msghdr->msg_len, 0, 
+            (struct sockaddr*) &server_udp_addr, sizeof(server_udp_addr)) < 0){
+        log_info("[handle_chatmsg_input] Could not send chat message to the server\n");
+        printf("!!! Incomplete. Check connection and make sure you are in a chat room\n");
+    } else { 
+        log_info("[handle_chatmsg_input] Successfully send the chat message to the server\n");
+    }
+
+    log_info("[handle_chatmsg_input] Finished handling chat message input\n");
 
     free(buf);
     return;
