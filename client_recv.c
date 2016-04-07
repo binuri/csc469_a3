@@ -171,20 +171,26 @@ void init_receiver()
 
 void handle_received_msg(char *buf)
 {
+    
     /**** YOUR CODE HERE ****/
+
+    log_info("[handle_received_msg] Starting handle received message\n");
 
     memset(buf, 0, MAX_MSG_LEN);
     int ret = recvfrom(udp_socket_fd,  buf, MAX_MSG_LEN, 0, NULL, NULL);
 
     if (ret < 0){
-        log_info("[handle_received_msg] Error occured when recieving message from the client\n");
+        log_info("[handle_received_msg] Error occured when recieving chat message\n");
         printf ("ERROR: Error in receiving messages from chat server\n");
         return;
     }
 
     struct chat_msghdr *chmh = (struct chat_msghdr *) buf;
 
-    printf("%s ::: %s", chmh->sender.member_name, (char *)chmh->msgdata);
+    printf("%s ::\n    %s", chmh->sender.member_name, (char *)chmh->msgdata);
+    
+    log_info("[handle_received_msg] Printed received message to receiver\n");
+
 
 }
 
