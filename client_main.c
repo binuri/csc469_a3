@@ -29,6 +29,7 @@
 
 char info[150];
 FILE *logfp = NULL;
+int log_control_messages = 1;
 
 static char *option_string = "h:t:u:n:";
 
@@ -82,10 +83,10 @@ static void usage(char **argv) {
 
 
 void log_info(char *msg){
-    if (DEBUG){
+    if (DEBUG && log_control_messages){
         fputs(msg, logfp);
+        fflush(logfp);
     }
-    fflush(logfp);
 }
 
 
@@ -124,7 +125,22 @@ void shutdown_clean() {
 }
 
 
+void close_reciever(){
+    msg_t msg;
+    /* 1. Send message to receiver to quit */
+    msg.mtype = RECV_TYPE;
+    msg.body.status = CHAT_QUIT;
+    msgsnd(ctrl2rcvr_qid, &msg, sizeof(struct body_s), 0);
 
+    /* 3. Wait for receiver to exit */
+    waitpid(receiver_pid, 0, 0);
+
+    /* 4. Destroy message channel */
+    unlink(ctrl2rcvr_fname);
+    if (msgctl(ctrl2rcvr_qid, IPC_RMID, NULL)) {
+        perror("cleanup - msgctl removal failed");
+    }
+}
 int initialize_client_only_channel(int *qid)
 {
     /* Create IPC message queue for communication with receiver process */
@@ -264,7 +280,8 @@ int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
 
     cmh->msg_type = htons(msg_type);
 
-    if (msg_type == QUIT_REQUEST || msg_type == ROOM_LIST_REQUEST){
+    if (msg_type == QUIT_REQUEST || msg_type == ROOM_LIST_REQUEST ||
+            msg_type == MEMBER_KEEP_ALIVE){
         // No need for additional data 
         cmh->msg_len = sizeof(struct control_msghdr) + 1;
     } else {
@@ -326,7 +343,7 @@ int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
 
     close(tcp_fd);
 
-    log_info("[send_control_msg] Successfully finished sending control messages...\n");
+    log_info("\t[send_control_msg] Successfully finished sending control messages...\n");
     free(buf);
     return 0;
 
@@ -497,7 +514,26 @@ int handle_create_room_req(char *room_name)
         printf("Incomplete: %s\n", (char *)res_hdr->msgdata);
     }
 
-    return 0;
+   return 0;
+}
+
+int handle_connection_status_req(){
+    
+    log_info("[handle_connection_status_req] Starting to check for server connection\n");
+    char response[MAX_MSG_LEN];
+
+    log_control_messages = 0;
+    int status = send_control_msg(MEMBER_KEEP_ALIVE, response, NULL);
+    log_control_messages = 1;
+
+    if (status < 0){
+        printf("Lost connection to the server\n");
+        log_info("[handle_connection_status_req] Could not connect to the server\n");
+        return -1;
+    }
+
+    log_info("[handle_connection_status_req] Server connection successful\n");
+    return 0;    
 }
 
 
@@ -787,6 +823,36 @@ void handle_command_input(char *line)
     return;
 }
 
+int reconnect_to_server(){
+  
+    log_info("[reconnect_to_server] Attempting to reconnect to the server\n");
+
+    int connection_stat = -1;
+    int num_tries = 0;
+
+    while (num_tries < 3){
+        printf("Reconnect attempt %d/3: \n", num_tries);
+        connection_stat = init_client();        
+        if (connection_stat == 0){
+            log_info("[reconnect_to_server] Successfully reconnected to the server\n");
+            return 0;
+        } else if (connection_stat == -1){
+            printf("Failed.\n");
+        } else if (connection_stat == -2){
+            log_info("[reconnect_to_server] Connected to server. But username is already taken\n");
+            printf("Successful. However, provided username already exists. Please reconnect with different username\n:");
+            return connection_stat;
+        } 
+
+        num_tries ++;
+    }
+
+    log_info("[reconnect_to_server] Failed to reconnect to the server.\n");
+    return -1;
+  
+}
+    
+
 void get_user_input()
 {
     char *buf = (char *)malloc(MAX_MSGDATA);
@@ -841,8 +907,15 @@ void get_user_input()
 
             printf("\n[%s]>  ",member_name);
         } else {
-            ///TODO: Reconnect
-
+            log_info("[get_user_input] Need to confirm server connection status\n");
+            int status = handle_connection_status_req();
+            if (status < 0){
+                close_reciever();
+                status = reconnect_to_server();
+                if (status < 0){
+                    shutdown_clean();
+                }
+            }
         }
     }
 
