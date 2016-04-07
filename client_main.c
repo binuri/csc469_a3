@@ -792,31 +792,57 @@ void get_user_input()
     char *buf = (char *)malloc(MAX_MSGDATA);
     char *result_str;
 
+    fd_set listening_set;
+    setbuf(stdout, NULL);
+   
+    printf("\n[%s]>  ",member_name);
+
+
+    struct timeval tv;
+
     while(TRUE) {
 
-        bzero(buf, MAX_MSGDATA);
 
-        printf("\n[%s]>  ",member_name);
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
 
-        result_str = fgets(buf,MAX_MSGDATA,stdin);
+        FD_ZERO(&listening_set);
+        FD_SET(STDIN_FILENO, &listening_set);
 
-        if (result_str == NULL) {
-            printf("Error or EOF while reading user input.  Guess we're done.\n");
-            break;
+        if (select(STDIN_FILENO + 1, &listening_set, NULL, NULL, &tv) < 0){
+            printf("ERROR: Could not retrieve user input\n");
+            return;
         }
 
-        /* Check if control message or chat message */
+        if(FD_ISSET(STDIN_FILENO, &listening_set)){
 
-        if (buf[0] == '!') {
-            /* buf probably ends with newline.  If so, get rid of it. */
-            int len = strlen(buf);
-            if (buf[len-1] == '\n') {
-                buf[len-1] = '\0';
+            memset(buf, 0, MAX_MSGDATA);
+
+            result_str = fgets(buf,MAX_MSGDATA,stdin);
+
+            if (result_str == NULL) {
+                printf("Error or EOF while reading user input.  Guess we're done.\n");
+                break;
             }
-            handle_command_input(&buf[1]);
 
+            /* Check if control message or chat message */
+
+            if (buf[0] == '!') {
+                /* buf probably ends with newline.  If so, get rid of it. */
+                int len = strlen(buf);
+                if (buf[len-1] == '\n') {
+                    buf[len-1] = '\0';
+                }
+                handle_command_input(&buf[1]);
+
+            } else {
+                handle_chatmsg_input(buf);
+            }
+
+            printf("\n[%s]>  ",member_name);
         } else {
-            handle_chatmsg_input(buf);
+            ///TODO: Reconnect
+
         }
     }
 
@@ -892,6 +918,7 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
 
 
 
