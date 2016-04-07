@@ -675,7 +675,6 @@ int init_client()
         printf("ERROR: Failed to register with chat server\n");
         log_info("[init_client] Failed to register with chat server\n");
 
-        shutdown_clean();
         return -1;
     }
 
@@ -738,16 +737,18 @@ int reconnect_to_server(){
     int num_tries = 0;
 
     while (num_tries < 3){
-        printf("Reconnect attempt %d/3: \n", num_tries);
+        printf("Reconnect attempt %d/3: \n", num_tries + 1);
+    
+        clear_old_receiver();
         connection_stat = init_client();
         if (connection_stat == 0){
             log_info("[reconnect_to_server] Successfully reconnected to the server\n");
             return 0;
         } else if (connection_stat == -1){
-            printf("Failed.\n");
+            // Attempt to reconnect again in this case
         } else if (connection_stat == -2){
             log_info("[reconnect_to_server] Connected to server. But username is already taken\n");
-            printf("Successful. However, provided username already exists. Please reconnect with different username\n:");
+            printf("Username already exists. Please reconnect with different username\n:");
             return connection_stat;
         }
 
@@ -763,7 +764,6 @@ void confirm_network_connection(){
     log_info("[get_user_input] Need to confirm server connection status\n");
     int status = handle_connection_status_req();
     if (status < 0){
-        clear_old_receiver();
         status = reconnect_to_server();
         if (status < 0){
             shutdown_clean();
@@ -864,6 +864,8 @@ void handle_command_input(char *line)
      */
     if(result == -1){
         confirm_network_connection();
+    } else if (result < 0){
+        shutdown_clean();
     } 
     
     return;
