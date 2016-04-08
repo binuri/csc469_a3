@@ -109,7 +109,7 @@ void init_receiver()
 
     /* 2. Initialize UDP socket for receiving chat messages. */
 
-    // Obtain a file descriptor
+    // Obtain the next available file descriptor
     if ((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0){
         log_info("[init_receiver] Failed to create UDP socket for chat receiver\n");
         printf("ERROR: Error in UDP Socket initialization in receiver\n");
@@ -250,7 +250,7 @@ void receive_msgs()
         }
 
 
-        timeout.tv_sec = 3;
+        timeout.tv_sec = 1;
         timeout.tv_usec = 0;
     
         FD_ZERO(&listen_fds);
@@ -301,7 +301,7 @@ int main(int argc, char **argv) {
 
 
     if (DEBUG){
-        logfp = fopen("yreceiver.log", "w");
+        logfp = fopen("receiver.log", "w");
         if (logfp == NULL){
             printf("Invalid log file provided for chat client receiver\n");
         } else {

@@ -125,6 +125,9 @@ void shutdown_clean() {
 }
 
 
+/*
+ * Performs the same functions as shutdown_clean, witout exiting
+ */
 void clear_old_receiver(){
 
     log_info("[clear_old_connection] Closing receiver from previous connection.\n");
@@ -149,6 +152,7 @@ void clear_old_receiver(){
     }
     
 }
+
 int initialize_client_only_channel(int *qid)
 {
     /* Create IPC message queue for communication with receiver process */
@@ -290,10 +294,16 @@ int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
 
     if (msg_type == QUIT_REQUEST || msg_type == ROOM_LIST_REQUEST ||
             msg_type == MEMBER_KEEP_ALIVE){
+        
         // No need for additional data 
         cmh->msg_len = sizeof(struct control_msghdr) + 1;
+
     } else {
         if (msg_type == REGISTER_REQUEST) {
+
+            // For REGISTER REQUEST cmhs, we need the register_msgdata
+            // struct with member name
+
             struct register_msgdata *rdata;
             rdata = (struct register_msgdata *) cmh->msgdata;
             rdata->udp_port = htons(client_udp_port);
@@ -304,6 +314,10 @@ int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
             sizeof(struct register_msgdata) +
             strlen(member_name) + 1;
         } else {
+
+            // Other requests are room requests which requires the room
+            // name in their msg data
+
             memcpy(cmh->msgdata, room_name, strlen(room_name) + 1);
             cmh->msg_len = sizeof(struct control_msghdr) +
                 strlen(room_name) + 1;
@@ -313,6 +327,10 @@ int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
     cmh->member_id = member_id;
 
     /** Sending control message */
+
+    /** To send the control message, we need first get a socked fd and connect that
+    to the  server port.**/
+
     int tcp_fd = 0;
     if ((tcp_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         log_info("\t[send_control_msg Failed to create socket for control messages\n");
@@ -325,26 +343,25 @@ int send_control_msg(u_int16_t msg_type, char *res, char *room_name){
     log_info(info);
 
     if (connect(tcp_fd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0){
-        log_info("\t[send_control_msg] Failed to connect to the server's TCP Socket\n");
+        log_info("\t[send_control_msg] Failed to connect to the server to the new socket\n");
         free(buf);
         return - 1;
     }
-
     log_info("\t[send_control_msg] Successfully connected to the server's TCP socket\n");
 
+    
     send(tcp_fd, buf, cmh->msg_len, 0);
-
     log_info("\t[send_control_msg] Sent control message to server\n");
 
+    
     memset(res, 0, MAX_MSG_LEN);
-
     if (recv(tcp_fd, res, MAX_MSG_LEN, 0) < 0){
-        log_info("\t[send_control_msg] Failed to recieve control message from server\n");
+        log_info("\t[send_control_msg] Failed to recieve control message response from server\n");
         free(buf);
         return - 1;
     }
-
     log_info("\t[send_control_msg] Received control message from server\n");
+
 
     close(tcp_fd);
 
@@ -524,7 +541,6 @@ int handle_create_room_req(char *room_name)
 
 int handle_connection_status_req(){
     
-    log_info("[handle_connection_status_req] Starting to check for server connection\n");
     char response[MAX_MSG_LEN];
 
     log_control_messages = 0;
@@ -683,6 +699,55 @@ int init_client()
     return 0;
 }
 
+int reconnect_to_server(){
+
+    log_info("[reconnect_to_server] Attempting to reconnect to the server\n");
+
+    int connection_stat = -1;
+    int num_tries = 0;
+
+    while (num_tries < 3){
+        printf("Reconnect attempt %d/3: \n", num_tries + 1);
+    
+        clear_old_receiver();
+        connection_stat = init_client();
+        if (connection_stat == 0){
+            log_info("[reconnect_to_server] Successfully reconnected to the server\n");
+            return 0;
+        } else if (connection_stat == -1){
+            // Attempt to reconnect again in this case
+        } else if (connection_stat == -2){
+            log_info("[reconnect_to_server] Connected to server. But username is already taken\n");
+            printf("Username already exists. Please reconnect with different username\n:");
+            return connection_stat;
+        }
+
+        num_tries ++;
+    }
+
+    log_info("[reconnect_to_server] Failed to reconnect to the server.\n");
+    return -1;
+
+}
+
+/*
+ * Checks to see whether the connection with the server is still alive. If not,
+ * then it tries to reconnect with the server. If that fails, then the client
+ * is safely terminated
+ */
+void confirm_network_connection(){
+
+    log_info("[confirm_network_connection] Need to confirm server connection status\n");
+    
+    int status = handle_connection_status_req();
+    if (status < 0){
+        status = reconnect_to_server();
+        if (status < 0){
+            shutdown_clean();
+        }
+    }
+}
+
 void handle_chatmsg_input(char *inputdata)
 {
     /* inputdata is a pointer to the message that the user typed in.
@@ -727,48 +792,6 @@ void handle_chatmsg_input(char *inputdata)
 
     free(buf);
     return;
-}
-
-int reconnect_to_server(){
-
-    log_info("[reconnect_to_server] Attempting to reconnect to the server\n");
-
-    int connection_stat = -1;
-    int num_tries = 0;
-
-    while (num_tries < 3){
-        printf("Reconnect attempt %d/3: \n", num_tries + 1);
-    
-        clear_old_receiver();
-        connection_stat = init_client();
-        if (connection_stat == 0){
-            log_info("[reconnect_to_server] Successfully reconnected to the server\n");
-            return 0;
-        } else if (connection_stat == -1){
-            // Attempt to reconnect again in this case
-        } else if (connection_stat == -2){
-            log_info("[reconnect_to_server] Connected to server. But username is already taken\n");
-            printf("Username already exists. Please reconnect with different username\n:");
-            return connection_stat;
-        }
-
-        num_tries ++;
-    }
-
-    log_info("[reconnect_to_server] Failed to reconnect to the server.\n");
-    return -1;
-
-}
-
-void confirm_network_connection(){
-    log_info("[get_user_input] Need to confirm server connection status\n");
-    int status = handle_connection_status_req();
-    if (status < 0){
-        status = reconnect_to_server();
-        if (status < 0){
-            shutdown_clean();
-        }
-    }
 }
 
 /* This should be called with the leading "!" stripped off the original
@@ -887,13 +910,13 @@ void get_user_input()
 
     while(TRUE) {
 
-
         tv.tv_sec = 5;
         tv.tv_usec = 0;
 
         FD_ZERO(&listening_set);
         FD_SET(STDIN_FILENO, &listening_set);
 
+        // Listen to user input with 5 second timeouts
         if (select(STDIN_FILENO + 1, &listening_set, NULL, NULL, &tv) < 0){
             printf("ERROR: Could not retrieve user input\n");
             return;
@@ -926,6 +949,8 @@ void get_user_input()
 
             printf("\n[%s]>  ",member_name);
         } else {
+            // The user has not communicated within the past 5 seconds, so we
+            // want to make sure that the connection is still alive.
             confirm_network_connection();     
         }
     }
@@ -960,7 +985,7 @@ int main(int argc, char **argv)
     }
 
     if (DEBUG){
-        logfp = fopen("pclient.log", "w");
+        logfp = fopen("chatclient.log", "w");
         if (logfp == NULL){
             printf("Invalid log file provided for chat client\n");
         } else {
@@ -995,7 +1020,7 @@ int main(int argc, char **argv)
     member_id = 0;
     if (init_client() < 0) {
         printf("Chat client is terminated since the the initialization was unsuccessful\n");
-        return -1;
+        shutdown_clean();
     }
 
     get_user_input();
